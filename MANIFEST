@@ -1,0 +1,3 @@
+Simple.pm
+bin/DFA-Simple-compiler
+t/test.t

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -Tw
+#!/usr/bin/perl -w
 #Copyright 1998-1999, Randall Maas.  All rights reserved.  This program is free
 #software; you can redistribute it and/or modify it under the same terms as
 #PERL itself.  
@@ -163,6 +163,10 @@ if (exists $MyArgs{'package'})
   {
      print "package $MyArgs{'package'};\n";
   }
+
+use Safe;
+my $Helper = new Safe;
+$Helper->permit(qw(:default));
 print "use DFA::Simple;\n\@ISA=qw(DFA::Simple);\n";
 
 my $F=\*STDIN;
@@ -172,9 +176,111 @@ my @States;
 my %StateNum;
 my $StateCnt=0;
 my @Trans;
+my $Test_Scanner;
 
+my @ParseState =
+    (undef,undef,
+     
+     #State == 2
+     sub
+      {
+	 #@_=(This state, next state, test, do);
+
+	 #Possibly allocate 'this state'
+	 if (!exists $StateNum{$_[0]})
+	   {
+	      $StateNum{$_[0]}=$StateCnt++;
+	   }
+
+         #Possibly allocate 'the next state'
+         if (!exists $StateNum{$_[1]})
+	   {
+	      $StateNum{$_[1]}=$StateCnt++;
+	   }
+
+         #Build the state rule.
+         my ($TSub,$DSub)=('','');
+	 if (defined $_[4])
+	   {
+	       # Attempt to make the things work out
+	       $_[4] =~ s/(^|[^>\w\$])(?!if)(\w+\()/$1$2/g;
+	       $DSub="sub {$_[4];}";
+	   }
+
+         if (defined $_[3] && length $_[3])
+           {
+	      # Attempt to make the things work out
+	      $_[3] =~ s/(^|[^>\w\$])(?!if)(\w+\()/$1$2/g;
+	      if (defined $Test_Scanner)
+		{
+		   $_=$_[3];
+		   $Helper->reval($Test_Scanner);
+		   if ($@) {die "Test scanner: $@\n";}
+		   $TSub=$_;
+		}
+	       else
+	        {
+		   $TSub=$_[3];
+	        }
+	   }
+	  else
+	   {$TSub="undef";}
+
+	 $StateRules[$StateNum{$_[0]}] .=
+	     "\t[$StateNum{$_[1]}, $TSub, $DSub],\n";
+      },
+
+     #State == 3;
+     sub
+      {
+	 my $Sub="sub { ";
+
+         #Part of code for rule transition
+	 if (defined $_[1])
+	   {
+	      if (!exists $StateNum{$_[1]})
+	        {
+	           $StateNum{$_[1]}=$StateCnt++;
+	        }
+
+	      $Sub .= $MyArgs{'package'}."->NextState($StateNum{$_[1]});";
+             }
+
+	 #Part of code for working
+	 if (defined $_[2])
+	   {
+	      $Sub .= $_[2];
+	   }
+
+	 $Sub.="}";
+
+	 if ($_[0] =~ /(\w+)\.(\w+)/)
+	   {print "\$$1\{$2}\t= $Sub;\n";}
+	  else
+	   {print "\$Except{$_[0]}=$Sub;\n";}
+      },
+
+     #State==4
+     sub
+      {
+	 return if !defined $_[0])
+         $Trans[$StateNum{$_[0]}]=[$_[1],$_[2]];
+      },
+
+     #State == 5, build up a test scanner
+     sub
+      {
+	 #Basically append this to the test scanner code
+	 $Test_Scanner .= "$_\n";
+      }
+    );
+
+
+#The file parser
 while (<$F>)
 {
+   chomp;
+
    #Check for POD
    if ($State != 0 && /^=\w+/) {push @States,$State; $State=0; next;}
 
@@ -190,89 +296,20 @@ while (<$F>)
 
    # Remove spaces
    s/^\s+//;
-   s/\s+|$//;  
+   s/\s+$//;
    
    if (!$_ || !length $_) {next;}
 
    #Handle multi-line things
 #   if (/\\$/)
 
-   if (/\[productions\]/i) {$State=2; next;}
-   if (/\[exceptions\]/i)  {$State=3; next;}
-   if (/\[transition\]/i)  {$State=4; next;}
+   if (/\[productions\]/i)    {$State=2; next;}
+   if (/\[exceptions\]/i)     {$State=3; next;}
+   if (/\[transition\]/i)     {$State=4; next;}
+   if (/\[test\s+scanner\]/i) {$State=5; $Test_Scanner=undef; next;}
+   if (/^\[/) {die "Unknown brace\n";}
 
-   my @Struct=split /\s*:\s*/, $_;
-      if ($State==2)
-        {
-           #Struct=(This state, next state, test, do);
-
-           #Possibly allocate 'this state'
-           if (!exists $StateNum{$Struct[0]})
-	     {
-	        $StateNum{$Struct[0]}=$StateCnt++;
-	     }
-
-           #Possibly allocate 'the next state'
-           if (!exists $StateNum{$Struct[1]})
-	     {
-	        $StateNum{$Struct[1]}=$StateCnt++;
-	     }
-
-           #Build the state rule.
-           my ($TSub,$DSub)=('','');
-           if (defined $Struct[3] && length $Struct[3])
-             {
-		# Attempt to make the things work out
-		$Struct[2] =~ s/(^|[^>\w\$])(?!if)(\w+\()/$1$2/g;
-		$TSub="sub {$Struct[3];}";
-	     }
-	    else
-	     {$TSub="undef";}
-	   if (defined $Struct[4])
-	     {
-		# Attempt to make the things work out
-		$Struct[3] =~ s/(^|[^>\w\$])(?!if)(\w+\()/$1$2/g;
-		$DSub="sub {$Struct[4];}";
-	     }
-           $StateRules[$StateNum{$Struct[0]}] .=
-	    "\t[$StateNum{$Struct[1]}, $TSub, $DSub],\n";
-        }
-   elsif ($State==3)
-        {
-           my $Sub="sub { ";
-
-           #Part of code for rule transition
-	   if (defined $Struct[1])
-             {
-		if (!exists $StateNum{$Struct[1]})
-	          {
-	             $StateNum{$Struct[1]}=$StateCnt++;
-	          }
-
-		 $Sub .= "Rabbit::Protocol->NextState(".$StateNum{$Struct[1]}.
-		     ");";
-             }
-
-           #Part of code for working
-	   if (defined $Struct[2])
-	     {
-		 $Sub .= $Struct[2];
-	     }
-
-	   $Sub.="}";
-
-           if ($Struct[0] =~ /(\w+)\.(\w+)/)
-	     {print "\$$1\{$2}\t= $Sub;\n";}
-	    else
-	     {print "\$Except{$Struct[0]}=$Sub;\n";}
-        }
-   elsif ($State==4)
-        {
-	    if (defined $Struct[0])
-	      {
-		 $Trans[$StateNum{$Struct[0]}]=[$Struct[1],$Struct[2]];
-	      }
-	}
+   &$ParseState[$State](split(/\s*:\s*/, $_));
 }
 
 close $F;
@@ -327,4 +364,4 @@ print "  ];\n\n";
 # --- Class Constructors ------------------------------------------------------
 print "\nsub new\n{\n",
     "   my \$self=shift;\n",
-    "   return Lingua::Protocol::new(\$self,\$Transitions,\$States,\@_);\n}";
+    "   return Lingua::Protocol::new(\$self,\$Transitions,\$States,\@_);\n}\n";

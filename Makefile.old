@@ -1,4 +1,4 @@
-# This Makefile is for the DFA-Simple extension to perl.
+# This Makefile is for the DFA::Simple extension to perl.
 #
 # It was generated automatically by MakeMaker version
 # 5.42 (Revision: 1.216) from the contents of
@@ -8,12 +8,12 @@
 #
 #   MakeMaker Parameters:
 
-#	EXE_FILES => [q[bin/DFA-Simple-compiler], q[bin/DFA-Simple-compiler~]]
-#	MAN1PODS => { bin/DFA-Simple-compiler~=>q[./blib/man1/DFA-Simple-compiler~.$(MAN1EXT)], bin/DFA-Simple-compiler=>q[./blib/man1/DFA-Simple-compiler.$(MAN1EXT)] }
-#	NAME => q[DFA-Simple]
-#	VERSION => q[0.0]
+#	EXE_FILES => [q[bin/DFA-Simple-compiler]]
+#	MAN1PODS => { bin/DFA-Simple-compiler=>q[./blib/man1/DFA-Simple-compiler.$(MAN1EXT)] }
+#	NAME => q[DFA::Simple]
+#	VERSION => q[0.1]
 #	clean => { FILES=>q[*% *.html *~ www-* .htp* .htg*] }
-#	dist => { COMPRESS=>q[gzip -9f], POSTOP=>q[mv $(DISTNAME)-$(VERSION).tar.gz ../], SUFFIX=>q[gz] }
+#	dist => { TARFLAGS=>q[cvfF], COMPRESS=>q[gzip -9f], POSTOP=>q[mv $(DISTNAME)-$(VERSION).tar.gz ../], SUFFIX=>q[gz] }
 #	linkext => { LINKTYPE=>q[] }
 
 # --- MakeMaker post_initialize section:
@@ -43,12 +43,12 @@ EXE_EXT =
 
 # --- MakeMaker constants section:
 AR_STATIC_ARGS = cr
-NAME = DFA-Simple
+NAME = DFA::Simple
 DISTNAME = DFA-Simple
 NAME_SYM = DFA_Simple
-VERSION = 0.0
-VERSION_SYM = 0_0
-XS_VERSION = 0.0
+VERSION = 0.1
+VERSION_SYM = 0_1
+XS_VERSION = 0.1
 INST_BIN = ./blib/bin
 INST_EXE = ./blib/script
 INST_LIB = ./blib/lib
@@ -87,8 +87,9 @@ MM_VERSION = 5.42
 # ROOTEXT = Directory part of FULLEXT with leading slash (eg /DBD)  !!! Deprecated from MM 5.32  !!!
 # PARENT_NAME = NAME without BASEEXT and no trailing :: (eg Foo::Bar)
 # DLBASE  = Basename part of dynamic library. May be just equal BASEEXT.
-FULLEXT = DFA-Simple
+FULLEXT = DFA/Simple
 BASEEXT = Simple
+PARENT_NAME = DFA::
 DLBASE = $(BASEEXT)
 OBJECT = 
 LDFROM = $(OBJECT)
@@ -99,10 +100,8 @@ XS_FILES=
 C_FILES = 
 O_FILES = 
 H_FILES = 
-MAN1PODS = bin/DFA-Simple-compiler \
-	bin/DFA-Simple-compiler~
-MAN3PODS = lib/DFA/ATN.pm \
-	lib/DFA/Simple.pm
+MAN1PODS = bin/DFA-Simple-compiler
+MAN3PODS = Simple.pm
 INST_MAN1DIR = ./blib/man1
 INSTALLMAN1DIR = /usr/man/man1
 MAN1EXT = 1
@@ -127,8 +126,8 @@ makemakerdflt: all
 CONFIGDEP = $(PERL_ARCHLIB)/Config.pm $(PERL_INC)/config.h
 
 # Where to put things:
-INST_LIBDIR      = $(INST_LIB)
-INST_ARCHLIBDIR  = $(INST_ARCHLIB)
+INST_LIBDIR      = $(INST_LIB)/DFA
+INST_ARCHLIBDIR  = $(INST_ARCHLIB)/DFA
 
 INST_AUTODIR     = $(INST_LIB)/auto/$(FULLEXT)
 INST_ARCHAUTODIR = $(INST_ARCHLIB)/auto/$(FULLEXT)
@@ -141,19 +140,10 @@ EXPORT_LIST =
 
 PERL_ARCHIVE = 
 
-TO_INST_PM = lib/DFA/ATN.pm \
-	lib/DFA/ATN.pm~ \
-	lib/DFA/Simple.pm \
-	lib/DFA/Simple.pm~
+TO_INST_PM = Simple.pm
 
-PM_TO_BLIB = lib/DFA/Simple.pm~ \
-	$(INST_LIB)/DFA/Simple.pm~ \
-	lib/DFA/ATN.pm~ \
-	$(INST_LIB)/DFA/ATN.pm~ \
-	lib/DFA/Simple.pm \
-	$(INST_LIB)/DFA/Simple.pm \
-	lib/DFA/ATN.pm \
-	$(INST_LIB)/DFA/ATN.pm
+PM_TO_BLIB = Simple.pm \
+	$(INST_LIBDIR)/Simple.pm
 
 
 # --- MakeMaker tool_autosplit section:
@@ -219,7 +209,7 @@ UNINSTALL =   $(PERL) -MExtUtils::Install \
 
 DISTVNAME = $(DISTNAME)-$(VERSION)
 TAR  = tar
-TARFLAGS = cvf
+TARFLAGS = cvfF
 ZIP  = zip
 ZIPFLAGS = -r
 COMPRESS = gzip -9f
@@ -389,19 +379,13 @@ POD2MAN = $(PERL) -we '%m=@ARGV;for (keys %m){' \
 -e 'system(qq[$$^X ].q["-I$(PERL_ARCHLIB)" "-I$(PERL_LIB)" $(POD2MAN_EXE) ].qq[$$_>$$m{$$_}])==0 or warn "Couldn\047t install $$m{$$_}\n";' \
 -e 'chmod 0644, $$m{$$_} or warn "chmod 644 $$m{$$_}: $$!\n";}'
 
-manifypods : bin/DFA-Simple-compiler~ \
-	bin/DFA-Simple-compiler \
-	lib/DFA/Simple.pm \
-	lib/DFA/ATN.pm
+manifypods : bin/DFA-Simple-compiler \
+	Simple.pm
 	@$(POD2MAN) \
-	bin/DFA-Simple-compiler~ \
-	./blib/man1/DFA-Simple-compiler~.$(MAN1EXT) \
 	bin/DFA-Simple-compiler \
 	./blib/man1/DFA-Simple-compiler.$(MAN1EXT) \
-	lib/DFA/Simple.pm \
-	$(INST_MAN3DIR)/DFA::Simple.$(MAN3EXT) \
-	lib/DFA/ATN.pm \
-	$(INST_MAN3DIR)/DFA::ATN.$(MAN3EXT)
+	Simple.pm \
+	$(INST_MAN3DIR)/DFA::Simple.$(MAN3EXT)
 
 # --- MakeMaker processPL section:
 
@@ -414,21 +398,16 @@ $(INST_SCRIPT)/.exists :: /usr/lib/perl5/i386-linux/5.00404/CORE/perl.h
 
 	-@$(CHMOD) 755 $(INST_SCRIPT)
 
-EXE_FILES = bin/DFA-Simple-compiler bin/DFA-Simple-compiler~
+EXE_FILES = bin/DFA-Simple-compiler
 
 FIXIN = $(PERL) -I$(PERL_ARCHLIB) -I$(PERL_LIB) -MExtUtils::MakeMaker \
     -e "MY->fixin(shift)"
 
-all :: $(INST_SCRIPT)/DFA-Simple-compiler~ $(INST_SCRIPT)/DFA-Simple-compiler
+all :: $(INST_SCRIPT)/DFA-Simple-compiler
 	@$(NOOP)
 
 realclean ::
-	rm -f $(INST_SCRIPT)/DFA-Simple-compiler~ $(INST_SCRIPT)/DFA-Simple-compiler
-
-$(INST_SCRIPT)/DFA-Simple-compiler~: bin/DFA-Simple-compiler~ Makefile $(INST_SCRIPT)/.exists
-	@rm -f $(INST_SCRIPT)/DFA-Simple-compiler~
-	cp bin/DFA-Simple-compiler~ $(INST_SCRIPT)/DFA-Simple-compiler~
-	$(FIXIN) $(INST_SCRIPT)/DFA-Simple-compiler~
+	rm -f $(INST_SCRIPT)/DFA-Simple-compiler
 
 $(INST_SCRIPT)/DFA-Simple-compiler: bin/DFA-Simple-compiler Makefile $(INST_SCRIPT)/.exists
 	@rm -f $(INST_SCRIPT)/DFA-Simple-compiler
@@ -455,7 +434,7 @@ clean ::
 # Delete temporary files (via clean) and also delete installed files
 realclean purge ::  clean
 	rm -rf $(INST_AUTODIR) $(INST_ARCHAUTODIR)
-	rm -f $(INST_LIB)/DFA/Simple.pm~ $(INST_LIB)/DFA/ATN.pm~ $(INST_LIB)/DFA/Simple.pm $(INST_LIB)/DFA/ATN.pm
+	rm -f $(INST_LIBDIR)/Simple.pm
 	rm -rf Makefile Makefile.old
 
 
@@ -665,15 +644,15 @@ $(MAKE_APERL_FILE) : $(FIRST_MAKEFILE)
 TEST_VERBOSE=0
 TEST_TYPE=test_$(LINKTYPE)
 TEST_FILE = test.pl
-TEST_FILES = 
+TEST_FILES = t/*.t
 TESTDB_SW = -d
 
 testdb :: testdb_$(LINKTYPE)
 
 test :: $(TEST_TYPE)
-	@echo 'No tests defined for $(NAME) extension.'
 
 test_dynamic :: pure_all
+	PERL_DL_NONLAZY=1 $(FULLPERL) -I$(INST_ARCHLIB) -I$(INST_LIB) -I$(PERL_ARCHLIB) -I$(PERL_LIB) -e 'use Test::Harness qw(&runtests $$verbose); $$verbose=$(TEST_VERBOSE); runtests @ARGV;' $(TEST_FILES)
 
 testdb_dynamic :: pure_all
 	PERL_DL_NONLAZY=1 $(FULLPERL) $(TESTDB_SW) -I$(INST_ARCHLIB) -I$(INST_LIB) -I$(PERL_ARCHLIB) -I$(PERL_LIB) $(TEST_FILE)
