@@ -7,7 +7,7 @@ package DFA::Simple;
 use vars qw($VERSION @ISA);
 use AutoLoader 'AUTOLOAD';
 @ISA=qw(AutoLoader);
-$VERSION="0.3";
+$VERSION="0.32";
 
 #Set up for threading, if available
 #if ($Config{usethreads})
@@ -73,8 +73,48 @@ or
 
    my $Obj = new DFA::Simple $Actions,[States];
 
-This creates a simple automaton with a finite number of individual states.
-The object is composed of the following three things (with methods to match):
+This creates a simple automaton with a finite number of individual states.  The
+short version is that state numbers are just indices into the array.
+
+The state basically binds the rest of the machine together:
+
+=over 8
+
+=item 1. There might be something you want done whenever you enter a given state (Transition Table)
+
+=item 2. There might be something you want done whenever you leave a given state (Transition Table)
+
+=item 3. You can go to some states from the current state (Action table)
+
+=item 4. There are tests to decide whether you should go to that new state (Action table)
+
+=item 5. There are conditional tasks you can do while sitting in that new state (Action table)
+
+=back
+
+This structure may remind you of the SysV run-level concepts.  It is very
+similar.
+
+At run time you don't typically feed any state numbers to the finite machine;
+you ignore them.  Rather your program may read inputs or such.  The tests for
+the state transition would examine this input, or some other variables to
+decide which new state to go to.  Whenever your code has gotten enough input,
+it would call the C<Check_For_NextState()> method.  This method runs through
+the tests, and carries out the state transitions ("firing the rules").
+
+=head2 The State Definitions, Tests, and Transitions
+
+As for where the state definitions, tests, and transitions come from: you have
+to define them yourself, or write a program to do that.  There are techniques
+for converting Phase Structrure grammars into state machines (usually thru
+converting it to Chomsky Normal form, and such), or by drawing bubble diagrams.
+In the case of the bubble diagram, I usually just number each bubble
+sequentially from left to right.  The arc (and its condition) will tell me most
+of how to build the Action Table.  What the bubble is supposed to do will tell
+me how to build the Transition Table and the last column of the Action Table.
+
+To support these, the object is composed of the following three things (with
+methods to match):
 
 =over 1
 
@@ -93,6 +133,101 @@ The object has rules for determining what its next state should be, and how to
 get there.
 
 =back
+
+=head2 Example
+
+Before we get into the deep details, I'll present a quick example.  First,
+here is the output:
+
+	[randym@a Out]$ perl tmp.pl
+	Intro
+
+	I will force us to silently go to state 1, then 2, then 3:
+	Greetings
+	Am Here (in state 1)
+	Bye
+	Am Here (in state 3)
+
+	Reseting:
+	Intro
+	I will force us to fail to go to a new state:
+	Unusual circumstances?
+	 at tmp.pl line 54
+
+
+And here is the example code:
+
+   use DFA::Simple;
+
+   #A table of what to do when entering or leaving a state.
+   my $Transitions =[
+	#Say "Intro" when entering state; do nothing when leaving
+        [sub {print "Intro\n";}, undef],
+
+	#Say "Greetings" when entering state, do nothing when leaving
+        [sub {print "Greetings\n";}, undef],
+
+	#When entering, do nothing, when leaving do nothing
+        [undef,undef],
+
+	#When entering say "Bye", when leaving do nothing
+        [sub {print "Bye\n";}, undef],
+   ];
+
+
+   # A global variable
+   my $BogusTest=0;
+
+   # Our state table.  
+   my $States =[
+     #State #0
+      [
+	#Next State,  Test that must be true or return true if we are to go
+	#into that state, what we do while /in/ that state
+	[1, sub{$BogusTest}, sub{print "Am Here (in state 1)\n"}],
+
+	#We can't go to any other state
+      ],
+
+     #State 1
+      [
+	# We can go to state #2 from state #1 if the test succeeds, but we
+	# don't really do anything there
+	[2, sub{$BogusTest}, ],
+      ],
+
+     #State 2
+      [
+	#We can go to state #1 again, but we do nothing
+	[1, sub{$BogusTest}, ],
+
+	# If the above test(s) fail, the undef below will force us to go
+	# into state #3
+	[3, undef, sub {print "Am Here (in state 3)\n";}],
+      ],
+     ];
+
+   my $F=new DFA::Simple $Transitions, $States;
+   $F->State(0);
+
+   print "\nI will force us to silently go to state 1, then 2, then 3:\n";
+   $BogusTest=1;
+   #Drive the state machine thru one transition
+   $F->Check_For_NextState();
+   #Drive the state machine thru one transition
+   $F->Check_For_NextState();
+
+   #Force us to go to state 3
+   $BogusTest=0;
+   #Drive the state machine thru one transition
+   $F->Check_For_NextState();
+
+   print "\nReseting:\n";
+   $F->State(0);
+   print "I will force us to fail to go to a new state:\n";
+   $BogusTest=0;
+   $F->Check_For_NextState();
+
 
 =head2 State
 
@@ -345,11 +480,18 @@ sub State
    $self->[0]=$NS;
 
    #Handle the state exit rule
-   if (defined $CState && defined $Acts->[$CState] &&
-       defined $Acts->[$CState]->[2])
+   if (defined $CState && defined $Acts->[$CState])
      {
-	my $A = $Acts->[$CState]->[2];
-        &$A($self);
+       my $A;
+       if (defined $Acts->[$CState]->[1])
+        {
+	   $A = $Acts->[$CState]->[1];
+        }
+       elsif (defined $Acts->[$CState]->[2])
+        {
+	   $A = $Acts->[$CState]->[2];
+        }
+       $A->($self) if defined $A;
      }
 
    #Handle the transition rule...

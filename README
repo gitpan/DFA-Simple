@@ -10,11 +10,19 @@ To Install
 	make
 	make install
 
+Bug Fixes
+Until version 0.32 the action table had a small bug.  The third element of the
+Actions array was employ as the code ref to be run when leaving a state.  This
+is still supported for backwards compatibility, but is deprecated.  The
+documentation specified the second element is to hold the action.  This is now
+used (it was ignored before), and if not set, the third element is checked.
+
+
 Contact the author:
   Randall Maas (randym@acm.org, http://www.hamline.edu/~rcmaas )
           
 Copyright
  
-   Copyright (C) 1998-1999, Randall Maas. All rights reserved. This
+   Copyright (C) 1998-2002, Randall Maas. All rights reserved. This
    package is free software; you can redistribute it and/or modify it
    under the same terms as Perl itself.

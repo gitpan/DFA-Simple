@@ -23,7 +23,7 @@ WriteMakefile(
                   },
     'linkext' => {LINKTYPE => '' }, 
     'clean'   => {FILES => "*% *.html *~ www-* .htp* .htg*"},
-    VERSION => '0.31',
+    VERSION => '0.32',
     'EXE_FILES' => [@Scripts],
     'MAN1PODS'  => {map {my $a=$_; s#^bin/#./blib/man1/#; $a,"$_.\$(MAN1EXT)";} @Scripts},
 );
