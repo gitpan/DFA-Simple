@@ -7,30 +7,48 @@ package DFA::Simple;
 use vars qw($VERSION @ISA);
 use AutoLoader 'AUTOLOAD';
 @ISA=qw(AutoLoader);
-$VERSION="0.1";
+$VERSION="0.3";
+
+#Set up for threading, if available
+#if ($Config{usethreads})
+#  {
+#     use Thread;
+#     use Thread::Queue;
+#     use Thread::Semaphore;
+#     @ISA=qw(AutoLoader Thread);
+#  }
 
 use Carp;
 my $Base=[];
 1;
 
 #The structure of the node is:
-#[CurrentState,Transitions,States, ...]
+#[CurrentState,Flags,Transitions,States, ...]
 
 sub new
 {
    my $self=shift;
+   my $class=ref($self)||$self;
+
    my $B=[@{$Base}];
-   if (@_) {$B->[1]=shift;}
+
+   #Preserve old state and such
+   if (ref $self) 
+     {
+	@{$B}=@{$self};
+     }
+
    if (@_) {$B->[2]=shift;}
    if (@_) {$B->[3]=shift;}
-   return bless $B, $self;
+   if (@_) {$B->[4]=shift;}
+   return bless $B, $class;
 }
 
 __END__
 
 =head1 NAME
 
-C<DFA::Simple> -- A PERL module to implement simple Discrete Finite Automata
+DFA::Simple - A PERL module to implement simple Discrete Finite Automata
 
 =head1 SYNOPSIS
 
@@ -83,7 +101,7 @@ a new state.
 
    my $S = $Obj->State;
 
-   $Obj->State = $NewState;
+   $Obj->State($NewState);
 
 The last one leaves the current state and goes to the specified I<NewState>.
 If the current state is defined, its I<StateExitCodeRef> will be called (see
@@ -98,9 +116,9 @@ perform when enterring or leaving a particular state.
 
    my $Actions = $Obj->Actions;
 
-   $Obj->Actions = [
+   $Obj->Actions([
 		   [StateEnterCodeRef, StateExitCodeRef],
-		 ];
+		 ]);
 
    
 I<Actions> is an array reference describing what to do when enterring and
@@ -132,6 +150,17 @@ carried out.
 
 The next section describes a different method of determining which rule to 
 employ.
+
+=head2 Running the machine
+
+To operate the state machine, first prime it:
+
+	$Obj->State(0);
+
+Then tell it run a state transition:
+
+	$Obj->Check_For_NextState();
+
 
 =head1 AUGMENTED TRANSITION NETWORKS
 
@@ -202,6 +231,51 @@ acitions.  The data is saved before a questionable action is carried out, and
 tossed out when a C<Retrieve> is called.  It is otherwise not used by the
 object implementation.
 
+=head1 Designing Recursive and Augmented Transition Networks
+
+There are several issues involved with designing ATNs:
+* Input and Output
+
+=head2 Input
+
+All input should be carefully thought out in an ATN -- this is for two reasons:
+
+=over 1
+
+=item * ATNs can back-up and retry different states, and
+
+=item * In multithreaded environments, several branchs of the ATN may be
+simultaneously operating.
+
+=back
+
+Some things to watch out for: reading from files, popping stuff off of global
+lists, things like that.  The current file position may change unexpectedly.
+
+
+=head2 Output
+
+All IO should be carefully thought out in an ATN -- this is because ATNs can
+back-up and retry different states, possibly invaliding any of the ATNs
+results.  
+
+print or other file writes
+any commands that affect the system (link, unlink, rename, etc.)
+C<enqueue> or otherwise changing any PERL variable.
+
+All output should be an ATN decides to commit to a branch
+
+=head2 Following all paths: special issues
+
+If you choose the option of having all the possible paths taken, there are some
+special issues.  First: what will the new state and registers be?  In this
+case, the registers are must all be 
+
+Becareful in single commit ATNs, with several nested branches.  These can lead
+to very inefficient scenarios, due to the difficulty stop all of the branches
+of investigation 
+
+
 =head1 Installation
 
     perl Makefile.PL
@@ -232,9 +306,9 @@ sub Actions
    if (@_)
      {
 	#Called to set the actions
-	$self->[1] = shift;
+	$self->[2] = shift;
      }
-   $self->[1];
+   $self->[2];
 }
 
 sub State
@@ -261,20 +335,20 @@ sub State
 	croak "DFA::Simple: No transition actions!\n";
      }
 
-   if (!defined $self->[2])
+   if (!defined $self->[3])
      {
 	croak "DFA::Simple: No states defined!\n"; 
      }
 
    my $NS = shift;
-   $CurrentStateTable=$self->[2]->[$NS];
+   $CurrentStateTable=$self->[3]->[$NS];
    $self->[0]=$NS;
 
    #Handle the state exit rule
    if (defined $CState && defined $Acts->[$CState] &&
-       defined $Acts->[$CState]->[1])
+       defined $Acts->[$CState]->[2])
      {
-	my $A = $Acts->[$CState]->[1];
+	my $A = $Acts->[$CState]->[2];
         &$A($self);
      }
 
@@ -286,8 +360,60 @@ sub State
      }
 }
 
+sub DoTheStateMachine
+{
+   while(<>)
+   {
+       Check_Current_State_Table_For_Next_Rule();
+       #if the commit or rollback flags are set, return.
+       return if (($self->[1] & 12) != 12);
+       #If we have single commit, and someone has committed... return
+       if (!($self->[1] & 2))
+         {
+	    #First lock the variable
+	    my $CtlVar=$self->[6];
+	    lock($$CtlVar);
+
+	    #Now check its value
+	    if (defined $$CtlVar && scalar @{$CtlVar}) {return;}
+	 }
+   }
+}
+
 #Each state transition rule is like so:
 # [$NextState, $Testcoderef, $DoCodeRef]
+
+#The structure of the node is:
+#[CurrentState,Flags, Transitions,States, Registers, Ref2CommittedThread,
+  Completion Queue, Sem]
+#[CurrentState,Flags, Transitions,States, Registers, Stack]
+#Flags
+# Bit 0: Set for PERL threaded mode
+# Bit 1: Set for `many' commit; otherwise single commit
+# Bit 2: Clear to indicate a roll back action
+# Bit 3: Clear to indicate a commit action 
+#  If both are set, then we are in a nested ATN
+
+sub Option
+{
+   my $self=shift;
+   if (exists $_{} && exists $Config{usethreads})
+     {
+        #Multithreaded is possible, check to see if it is requested
+	if (defined $_{} && $_{})
+	  {
+	     #Multithreaded is requested
+	     $self->[1] |= 1;
+	  }
+	 else
+	  {
+	     #Multithreaded is disabled
+	     $self->[1] &= ~1;
+	  }
+     }
+   if (exists %{})
+
+}
 
 sub Check_For_NextState
 {
@@ -319,16 +445,38 @@ sub Check_For_NextState
    croak "Unusual circumstances?\n";
 }
 
-sub DoTheStateMachine
+#Child ATN, used to investigate possible branch paths
+sub Child
 {
-   while(<>)
-   {
-       Check_Current_State_Table_For_Next_Rule();
-   }
-}
+   my $self=shift;
+   my $ARef=shift;
 
-#The structure of the node is:
-#[CurrentState,Transitions,States, Stack, Registers]
+   #Setup up pointer to where our results go
+   $self->[5]=shift;
+
+   #Setup commit/rollback flags to indicate nothing yet
+   $self->[1] |= 12;
+
+   #Check to see if the other side has comitted...
+	   
+   #Set up for the next state
+   my $NState=shift;
+   if ($self->[0] ne $NState)
+     {
+	$self->State($NState);
+     }
+   #Carry out the action coderef;
+   if (defined $ARef) {$ARef($self);}
+   
+   #Run the state machine
+   $self->NextState();
+   
+   #Return value
+   # 0 or undef if the "abort" (or retrieve previous state) flag is set
+   # otherwise, results are good
+   return 1 if ($self->[1] & 4);
+   return undef;
+}
 
 sub Register
 {
@@ -352,12 +500,216 @@ sub Hold
 {
    my $self=shift;
    #Save the state and frame
-   push @{$self->[3]}, $self->State, [@{$self->Register}];
+   push @{$self->[5]}, $self->State, [@{$self->Register}];
 }
 
 sub Retrieve
 {
    my $self=shift;
-   $self->Register = pop @{$self->[3]};
-   $self->State(pop @{$self->[3]});
+   #Check the flags see if we are in threaded mode
+   if ($self->[1] & 1)
+     {
+        #Set the flags to indicate a "Retrieve" operation 
+        $self->[1] &= ~4;
+	return;
+     }
+
+   #Otherwise, we are in a mode where we explicitly handle saving and restoring
+   #state.
+   $self->Register = pop @{$self->[5]};
+   $self->State(pop @{$self->[5]});
 }
+
+sub Commit
+{
+   my $self=shift;
+   my $CtlVar=$self->[5];
+
+   #Indicate that no more processing in this thread should be done
+   $self->[1] &= ~8;
+
+   #Lock it to prevent someone else from getting there
+   lock($$CtlVar);
+
+   #Set up the stuff
+   $CtlVar->[0] = $self->[0];
+   $CtlVar->[1] = $self->[4];
+}
+
+#--- Implementation of the Multithreaded Branches -----------------------------
+#The this figures out the next state, in a Threaded, Examine All Paths mode
+sub NextState_TA
+{
+   my $self=shift;
+
+   #Create a place to store the new ATN
+   my @Heir;
+
+   #Create a place to store the threads as they complete
+   my $TQ=new Thread::Queue;
+   $self->[5]=$TQ;
+
+   foreach my $I (@{$CurrentStateTable})
+    {
+       #First, perform the test
+       if (defined $I->[1])
+	 {
+	    my $CodeRef=$I->[1];
+	    if (!&$CodeRef($_[0])) {next;}
+         }
+
+       #need to create a child object that has a different state
+       my $Me=$self->new;
+       my $ThreadCode = sub
+        {
+	    $Me->Child(\@Heir, $I->[0], $I->[2]);
+	    #We enqueue ourselves for the sake of efficiency.  Threads will be
+	    #reaped faster this way since our parent knows who to `join'.
+	    $TQ->enqueue($Me);
+        }
+
+       #Spawn the new thread
+       $ThrCount++;
+       my $Thr = new Thread, $ThreadCode;
+    }
+
+   #Now wait for them all
+   $self->Wait_TM($ThrCount);
+
+   #What is our next state, and set of registers?
+   # if no Heir, bad things may have happened
+   if (!defined @Heir || !scalar @Heir)
+     {
+	#Are in a branch state?
+	if ($self->[1] & 12)
+	  {
+	     #Yes: rollback to the earlier state
+	     $self->Retrieve();
+	     return;
+	  }
+	else
+	{
+	  No: AieE!
+	}
+     }
+   $self->[0]=shift @Heir;
+   $self->[4]=shift @Heir;
+}
+
+sub Wait_TM
+{
+   my $self=shift;
+   my $ThrCount=shift;
+
+   #Wait for all of the threads to end & put themselves in the completion queue
+   while ($ThrCount)
+    {
+       #Wait for one thread to complete
+       my $Thr = $self->[6]->dequeue();
+       $ThrCount--;
+
+       $Thr->join();
+    }
+}
+
+sub Dispatch_TS
+{
+   my $self=shift;
+   my $Heir=shift;
+   my @Threads2Do;
+
+   foreach my $I (@{$CurrentStateTable})
+    {
+       #First, perform the test
+       if (defined $I->[1])
+	 {
+	    my $CodeRef=$I->[1];
+	    if (!&$CodeRef($_[0])) {next;}
+         }
+
+       #need to create a child object that has a different state
+       my $Me=$self->new;
+       my $Sem = new Thread::Semaphore;
+       push @ChildSems, $Sem;
+       
+       my $ThreadCode = sub
+        {
+	   $Me->Child($Heir, $I->[0]);
+       
+	   #We enqueue ourselves for the sake of efficiency.  Threads will be
+	   #reaped faster this way since our parent knows who to `join'.
+	   $TQ->enqueue($Me);
+	   
+	   #Increment the semaphore to wake the parent
+	   $Sem->up();
+        };
+
+       #Queue the new thread
+       push @Threads2Do, $ThreadCode;
+    }
+
+   $self->Wait_TS($Heir,\@Threads2Don, \@ChildSems);
+}
+
+sub Wait_TS
+{
+   my ($self,$Heir, $Threads2Do, $ChildSems) = @_;
+   my $Sem=$self->[7];
+   my $ThreadsOutstanding=0;
+
+   #Dispatch each of these... should be throttled
+ THRSUBMIT:
+   while (@{$Threads2Do})
+    {
+	$ThreadsOutstanding++;
+	new Thread pop @{$Threads2Do};
+	last THRSUBMIT if $ThreadsOutstanding > $MaxOutstanding;
+    }
+
+   #Now wait for the threads
+   while ($ThreadsOutstanding)
+    {
+       #Wait for one thread to complete, or a signal
+       $Sem->down();
+
+       #Now figure out whether it is a child or a signal of death
+       if (($self->[1] & 12)==12 && scalar @{$self->[5]})
+         {
+	    #Send death signal to all remaining children; to do this we will
+	    #mark the Heir as completed, then bump a semaphore count
+	    {
+	       lock($$Heir);
+	       $Heir->[0]=undef;
+	       $Heir->[1]=undef;
+	    }
+	    
+	    #Now bump each of the semaphores, in case they have branches
+	    foreach my $I (@{$ChildSems})
+	     {
+		$I->up();
+	     }
+	    
+	    #Mark ourselves in the "rollback phase"
+	    $self->Retrieve();
+	    next;
+         }
+
+       #Reap our child threads
+       $ThreadsOutstanding--;
+       my $Thr = $self->[6]->dequeue();
+       my $R = $Thr->join();
+       #Check to see if this thread committed
+       if (defined $R && $R)
+         {
+	    $self->Commit();
+         }
+
+       #Submit some more threads if we don't have too many outstanding threads,
+       # and we haven't been canceled
+       if ($ThreadsOutstanding < $MaxOutstanding && (($self->[1] & 12)==12))
+         {
+	     new Thread shift @{$Threads2Do};
+         }
+    }
+}
+

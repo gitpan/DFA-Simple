@@ -5,15 +5,13 @@
 
 =head1 NAME
 
-C<DFA-Simple-compiler> -- A simple automaton compiler with discrete states
+DFA-Simple-compiler -- A simple automaton compiler with discrete states
 
 =head1 DESCRIPTION
 
 This compiles a table of information into a simple automaton.  The automaton
 produced is a Perl module that inherits from L<DFA::Simple>.  This is modeled
-on augmented transition networks (ATN), but is not as sophisticated;  for the
-full power of ATN see L<DFA::ATN>.
-
+on augmented transition networks (ATN), but is not as sophisticated.
 
 The options include:
 
@@ -39,8 +37,8 @@ determined by performing a  number of tests.  The first test that passes
 indicates what the next state should be, and the action that should be
 performed.  The test must be carefully designed to operate correctly; there is
 built-in method of recovery after transitioning to the wrong state or
-performing the wrong action.  For an automaton that can do this, see
-L<DFA::ATN>.
+performing the wrong action.  For an automaton that can do this, see ATN
+section of L<DFA::Simple>.
 
 To define the automaton, you need to create a file that contains your
 definition.  It has three sections, which can be broken down and rearranged
@@ -263,7 +261,7 @@ my @ParseState =
      #State==4
      sub
       {
-	 return if !defined $_[0])
+	 return if !defined $_[0];
          $Trans[$StateNum{$_[0]}]=[$_[1],$_[2]];
       },
 
@@ -309,7 +307,8 @@ while (<$F>)
    if (/\[test\s+scanner\]/i) {$State=5; $Test_Scanner=undef; next;}
    if (/^\[/) {die "Unknown brace\n";}
 
-   &$ParseState[$State](split(/\s*:\s*/, $_));
+   my $Func= $ParseState[$State];
+   &$Func(split(/\s*:\s*/, $_));
 }
 
 close $F;
